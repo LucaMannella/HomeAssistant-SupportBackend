@@ -6,8 +6,9 @@ const cors = require('cors');
 const { check, validationResult, body, param } = require('express-validator'); // validation middleware
 
 const temperatureDao = require('./dao-temperatures'); // module for accessing the temperatures table in the DB
-const userDao = require('./dao-users'); // module for accessing the user table in the DB
-const switchDao = require('./dao-switches'); // module for accessing the user table in the DB
+const userDao = require('./dao-users'); // module for accessing the users table in the DB
+const switchDao = require('./dao-switches'); // module for accessing the switches table in the DB
+const lightDao = require('./dao-lights'); // module for accessing the lights table in the DB
 
 /** Authentication-related imports **/
 const passport = require('passport');
@@ -164,17 +165,17 @@ app.get('/api/temperatures/last',
 // isLoggedIn,                 // check: is the user logged-in?
 // [ check('id').isInt() ],    // check: validation
 async (req, res) => {
-    try {
-      const result = await temperatureDao.getLastTemperature(1);
-      //const result = await temperatureDao.getTemperature(req.user.id);
-      if (result.error)
-        res.status(404).json(result);
-      else
-        // NOTE: "invalid dates" (i.e., missing dates) are set to null during JSON serialization
-        res.json(result);
-    } catch (err) {
-      res.status(500).end();
-    }
+  try {
+    const result = await temperatureDao.getLastTemperature(1);
+    //const result = await temperatureDao.getTemperature(req.user.id);
+    if (result.error)
+      res.status(404).json(result);
+    else
+      // NOTE: "invalid dates" (i.e., missing dates) are set to null during JSON serialization
+      res.json(result);
+  } catch (err) {
+    res.status(500).end();
+  }
 });
 
 // GET /api/temperatures/<id>
@@ -183,17 +184,17 @@ app.get('/api/temperatures/:id',
 // isLoggedIn,                 // check: is the user logged-in?
 // [ check('id').isInt() ],    // check: validation
 async (req, res) => {
-    try {
-      const result = await temperatureDao.getTemperature(1, req.params.id);
-      // const result = await temperatureDao.getTemperature(req.user.id, req.params.id);
-      if (result.error)
-        res.status(404).json(result);
-      else
-        // NOTE: "invalid dates" (i.e., missing dates) are set to null during JSON serialization
-        res.json(result);
-    } catch (err) {
-      res.status(500).end();
-    }
+  try {
+    const result = await temperatureDao.getTemperature(1, req.params.id);
+    // const result = await temperatureDao.getTemperature(req.user.id, req.params.id);
+    if (result.error)
+      res.status(404).json(result);
+    else
+      // NOTE: "invalid dates" (i.e., missing dates) are set to null during JSON serialization
+      res.json(result);
+  } catch (err) {
+    res.status(500).end();
+  }
 });
 
 
@@ -233,10 +234,10 @@ async (req, res) => {
 
 // DELETE /api/temperatures/<id>
 // Given a temperature id, this route deletes the associated temperature from the library.
-app.delete('/api/temperatures/:id', 
+app.delete('/api/temperatures/:id',
 // isLoggedIn,
 // [ check('id').isInt() ], 
-  async (req, res) => {
+async (req, res) => {
   try {
     // NOTE: if there is no temperature with the specified id, the delete operation is considered successful.
     await temperatureDao.deleteTemperature(1, req.params.id);
@@ -251,8 +252,8 @@ app.delete('/api/temperatures/:id',
 /* ------ */
 
 
-// GET /api/temperatures/<id>
-// Given a temperature id, this route returns the associated temperature from the library.
+// GET /api/switches/<id>
+// Given a switch id, this route returns the switch's status.
 app.get('/api/switches/:id', 
 // isLoggedIn,                 // check: is the user logged-in?
 // [ check('id').isInt() ],    // check: validation
@@ -270,11 +271,11 @@ async (req, res) => {
 });
 
 // PUT /api/switches/<id>
-// This route changes the status of the switch. It could also be a PATCH.
+// This route changes the status of a switch. It could also be a PATCH.
 app.put('/api/switches/:id/', 
 //isLoggedIn,
   [
-    check(['id']).isInt(),  
+    check(['id']).isInt(),
     check('value').isBoolean(),
   ], 
   async (req, res) => {
@@ -302,6 +303,59 @@ app.put('/api/switches/:id/',
     return res.json(result); 
   } catch (err) {
     res.status(503).json({ error: `Database error during the update of switch ${req.params.id}` });
+  }
+});
+
+
+// GET /api/lights/<id>
+// Given a light id, this route returns the light's status.
+app.get('/api/lights/:id',
+// isLoggedIn,                 // check: is the user logged-in?
+// [ check('id').isInt() ],    // check: validation
+async (req, res) => {
+    try {
+      const result = await lightDao.getLight(1, req.params.id);
+      if (result.error)
+        res.status(404).json(result);
+      else
+        // NOTE: "invalid dates" (i.e., missing dates) are set to null during JSON serialization
+        res.json(result);
+    } catch (err) {
+      res.status(500).end();
+    }
+});
+
+// PUT /api/lights/<id>
+// This route changes the status of a light. It could also be a PATCH.
+app.put('/api/lights/:id/',
+//isLoggedIn,
+  [
+    check(['id']).isInt(),
+    check('value').isInt(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).formatWith(errorFormatter); // format error message
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ error: errors.array().join(", ")  }); // error message is a single string with all error joined together
+    }
+
+    if (req.body.id !== Number(req.params.id)) {  // Check if url and body id mismatch
+      return res.status(422).json({ error: 'URL and body id mismatch' });
+    }
+
+  try {
+    const s = await lightDao.getLight(req.body.user, req.body.id);
+    if (s.error)
+      return res.status(404).json(s);
+
+    s.date = dayjs.utc().format();
+    s.value =  req.body.value;
+    console.log(s);
+
+    const result = await lightDao.updateLight(req.body.user, s.id, s);
+    return res.json(result);
+  } catch (err) {
+    res.status(503).json({ error: `Database error during the update of light ${req.params.id}` });
   }
 });
 
